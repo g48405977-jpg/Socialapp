@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Login - SocialApp</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
+
+</head>
+
+<body class="auth-page">
+
+<div class="auth-card">
+
+    <div class="logo">
+        🚀
+    </div>
+
+    <h1>SocialApp</h1>
+
+    <p class="subtitle">
+        Welcome back
+    </p>
+
+    <form
+        method="POST"
+        action="/login"
+    >
+
+        <input
+            type="text"
+            name="username"
+            placeholder="Username"
+            autocomplete="username"
+            required
+        >
+
+        <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            autocomplete="current-password"
+            required
+        >
+
+        <button
+            type="submit"
+            class="auth-button"
+        >
+            Login
+        </button>
+
+    </form>
+
+    <p class="auth-footer">
+        Don't have an account?
+        <a href="/register">
+            Create account
+        </a>
+    </p>
+
+</div>
+
+</body>
+</html>

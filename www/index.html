@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SocialApp</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<header>
+
+    <h2>SocialApp 🚀</h2>
+
+    {% if username %}
+        <a href="/profile">👤 {{ username }}</a>
+    {% else %}
+        <a href="/login">Login</a>
+    {% endif %}
+
+</header>
+
+
+<nav>
+
+    <a href="/">🏠 Home</a>
+
+{% if username %}
+<a href="/notifications" class="notification-link">
+    🔔
+    {% if unread > 0 %}
+        <span class="notification-badge">
+            {{ unread }}
+        </span>
+    {% endif %}
+</a>
+    🔔 Notifications
+    {% if unread and unread > 0 %}
+        <span class="badge">{{ unread }}</span>
+    {% endif %}
+</a>
+{% endif %}
+
+    {% if username %}
+        <a href="/profile">👤 Profile</a>
+        <a href="/logout">🚪 Logout</a>
+    {% endif %}
+
+</nav>
+
+
+<main>
+
+
+{% if username %}
+
+<section class="create">
+
+    <form
+        method="POST"
+        action="/post"
+        enctype="multipart/form-data"
+    >
+
+        <input
+            type="text"
+            name="content"
+            placeholder="What's on your mind?"
+        >
+
+        <input
+            type="file"
+            name="photo"
+            accept="image/*"
+        >
+
+        <button type="submit">
+            📤 Post
+        </button>
+
+    </form>
+
+</section>
+
+{% else %}
+
+<section class="welcome">
+
+    <h1>Welcome to SocialApp 👋</h1>
+
+    <p>Login or create an account to post.</p>
+
+    <a href="/login">Login</a>
+
+    <a href="/register">Register</a>
+
+</section>
+
+{% endif %}
+
+
+<section id="feed">
+
+{% for post in posts %}
+
+<article class="post">
+
+    <div class="user">
+
+        <div class="avatar">
+            {{ post["username"][0].upper() }}
+        </div>
+
+        <strong>
+            {{ post["username"] }}
+        </strong>
+
+    </div>
+
+
+    {% if post["content"] %}
+
+    <p class="content">
+        {{ post["content"] }}
+    </p>
+
+    {% endif %}
+
+
+    {% if post["image"] %}
+
+    <img
+        src="/static/uploads/{{ post['image'] }}"
+        class="post-image"
+    >
+
+    {% endif %}
+
+
+    <div class="actions">
+
+        {% if username %}
+
+        <form
+            method="POST"
+            action="/like/{{ post['id'] }}"
+        >
+
+            <button type="submit">
+                ❤️ {{ post["likes"] }}
+            </button>
+
+        </form>
+
+        {% else %}
+
+        <span>
+            ❤️ {{ post["likes"] }}
+        </span>
+
+        {% endif %}
+
+    </div>
+
+
+    <div class="comments">
+
+        <h4>💬 Comments</h4>
+
+
+        {% for comment in comments %}
+
+            {% if comment["post_id"] == post["id"] %}
+
+            <div class="comment">
+
+                <strong>
+                    {{ comment["username"] }}
+                </strong>
+
+                {{ comment["content"] }}
+
+            </div>
+
+            {% endif %}
+
+        {% endfor %}
+
+
+        {% if username %}
+
+        <form
+            method="POST"
+            action="/comment/{{ post['id'] }}"
+            class="comment-form"
+        >
+
+            <input
+                type="text"
+                name="content"
+                placeholder="Write a comment..."
+                required
+            >
+
+            <button type="submit">
+                Send
+            </button>
+
+        </form>
+
+        {% endif %}
+
+    </div>
+
+</article>
+
+{% endfor %}
+
+</section>
+
+</main>
+
+
+<nav class="bottom-nav">
+
+    <a href="/">
+        <span class="icon">🏠</span>
+        Home
+    </a>
+
+    <a href="/search">
+        <span class="icon">🔍</span>
+        Search
+    </a>
+
+    <a href="javascript:openCreate()" class="create-button">
+        +
+    </a>
+
+    <a href="/inbox">
+        <span class="icon">💬</span>
+        Messages
+    </a>
+
+    <a href="/profile">
+        <span class="icon">👤</span>
+        Profile
+    </a>
+
+</nav>
+
+
+<div id="create-modal" class="modal">
+
+    <div class="modal-content">
+
+        <button
+            class="close-modal"
+            onclick="closeCreate()"
+        >
+            ×
+        </button>
+
+        <h2>➕ Create Post</h2>
+
+        <form
+            method="POST"
+            action="/post"
+            enctype="multipart/form-data"
+        >
+
+            <textarea
+                name="content"
+                placeholder="What's on your mind?"
+                rows="5"
+            ></textarea>
+
+            <label class="photo-upload">
+                📸 Add Photo
+
+                <input
+                    type="file"
+                    name="photo"
+                    accept="image/*"
+                >
+            </label>
+
+            <button
+                type="submit"
+                class="post-button"
+            >
+                Post
+            </button>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+<script>
+
+function toggleComments(id) {
+
+    const box = document.getElementById(
+        "comments-" + id
+    );
+
+    if (box.style.display === "block") {
+        box.style.display = "none";
+    } else {
+        box.style.display = "block";
+    }
+
+}
+
+</script>
+
+</body>
+
+</html>
+
+<script>
+
+function openCreate() {
+
+    document.getElementById(
+        "create-modal"
+    ).style.display = "flex";
+
+}
+
+function closeCreate() {
+
+    document.getElementById(
+        "create-modal"
+    ).style.display = "none";
+
+}
+
+</script>

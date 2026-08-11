@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ username }} - SocialApp</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<header>
+    <h2>SocialApp 🚀</h2>
+    <a href="/">🏠 Home</a>
+</header>
+
+<main>
+
+    <section class="profile-photo-box">
+
+        {% if profile_image %}
+
+            <img
+                src="/static/uploads/{{ profile_image }}"
+                class="profile-image"
+            >
+
+        {% else %}
+
+            <div class="avatar big">
+                {{ username[0].upper() }}
+            </div>
+
+        {% endif %}
+
+        <h2>@{{ username }}</h2>
+
+        <form
+            method="POST"
+            action="/profile/upload"
+            enctype="multipart/form-data"
+        >
+
+            <label class="photo-upload">
+                📸 Choose Profile Photo
+
+                <input
+                    type="file"
+                    name="profile_image"
+                    accept="image/*"
+                    required
+                >
+            </label>
+
+            <button
+                type="submit"
+                class="auth-button"
+            >
+                Upload Photo
+            </button>
+
+        </form>
+
+    </section>
+
+</main>
+
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Messages - SocialApp</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+
+</head>
+
+<body>
+
+<header class="top-header">
+
+    <a href="/" class="back-link">← Home</a>
+
+    <h2>💬 Messages</h2>
+
+</header>
+
+
+<main class="inbox-page">
+
+    {% if conversations %}
+
+        {% for chat in conversations %}
+
+            <a
+                href="/messages/{{ chat['username'] }}"
+                class="inbox-item"
+            >
+
+                {% if chat["profile_image"] %}
+
+                    <img
+                        src="/static/uploads/{{ chat['profile_image'] }}"
+                        class="inbox-avatar-image"
+                        alt="Profile"
+                    >
+
+                {% else %}
+
+                    <div class="inbox-avatar">
+                        {{ chat["username"][0].upper() }}
+                    </div>
+
+                {% endif %}
+
+
+                <div class="inbox-info">
+
+                    <strong>
+                        {{ chat["username"] }}
+                    </strong>
+
+                    <span>
+                        {{ chat["last_message"] }}
+                    </span>
+
+                    <small>
+                        {{ chat["created_at"] }}
+                    </small>
+
+                </div>
+
+
+                {% if chat["unread"] > 0 %}
+
+                    <span class="message-badge">
+                        {{ chat["unread"] }}
+                    </span>
+
+                {% endif %}
+
+            </a>
+
+        {% endfor %}
+
+    {% else %}
+
+        <div class="empty-notifications">
+
+            <div>💬</div>
+
+            <h3>No messages yet</h3>
+
+            <p>Start a conversation with someone.</p>
+
+        </div>
+
+    {% endif %}
+
+</main>
+
+</body>
+</html>

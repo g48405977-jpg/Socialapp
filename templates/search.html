@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Search - SocialApp</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<header>
+
+    <h2>SocialApp 🚀</h2>
+
+    <a href="/">🏠 Home</a>
+
+</header>
+
+<main>
+
+    <h1>🔍 Find People</h1>
+
+    <form method="GET" action="/search">
+
+        <input
+            type="text"
+            name="q"
+            value="{{ query }}"
+            placeholder="Search username..."
+            required
+        >
+
+        <button type="submit">
+            Search
+        </button>
+
+    </form>
+
+
+    <section>
+
+    {% for user in users %}
+
+        <article class="user-card">
+
+            {% if user["profile_image"] %}
+
+                <img
+                    src="/static/uploads/{{ user['profile_image'] }}"
+                    class="profile-small"
+                >
+
+            {% else %}
+
+                <div class="avatar">
+                    {{ user["username"][0].upper() }}
+                </div>
+
+            {% endif %}
+
+
+            <a
+                href="/user/{{ user['username'] }}"
+                class="username-link"
+            >
+
+                {% if user["profile_image"] %}
+
+                    <img
+                        src="/static/uploads/{{ user['profile_image'] }}"
+                        class="search-avatar"
+                    >
+
+                {% else %}
+
+                    <span class="search-avatar-fallback">
+                        {{ user["username"][0].upper() }}
+                    </span>
+
+                {% endif %}
+                <strong>
+                    {{ user["username"] }}
+                </strong>
+            </a>
+
+
+            {% if user["username"] in following_names %}
+
+                <form
+                    method="POST"
+                    action="/unfollow/{{ user['username'] }}"
+                >
+
+                    <button type="submit">
+                        Following ✓
+                    </button>
+
+                </form>
+
+            {% else %}
+
+                <form
+                    method="POST"
+                    action="/follow/{{ user['username'] }}"
+                >
+
+                    <button type="submit">
+                        Follow +
+                    </button>
+
+                </form>
+
+            {% endif %}
+
+            <a
+                href="/messages/{{ user['username'] }}"
+                class="message-button"
+            >
+                💬 Message
+            </a>
+
+        </article>
+
+    {% else %}
+
+        {% if query %}
+            <p>No users found.</p>
+        {% else %}
+            <p>Search for a username.</p>
+        {% endif %}
+
+    {% endfor %}
+
+    </section>
+
+</main>
+
+</body>
+</html>

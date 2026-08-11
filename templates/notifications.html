@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Notifications - SocialApp</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
+</head>
+
+<body>
+
+<header class="top-header">
+
+    <a href="/" class="back-link">← Home</a>
+
+    <h2>🔔 Notifications</h2>
+
+</header>
+
+<main class="notifications-page">
+
+    {% if notifications %}
+
+        {% for notification in notifications %}
+
+            <div
+                class="notification {% if notification['read'] == 0 %}unread{% endif %}"
+            >
+
+                <div class="notification-icon">
+
+                    {% if notification["type"] == "follow" %}
+                        👥
+                    {% elif notification["type"] == "message" %}
+                        💬
+                    {% elif notification["type"] == "like" %}
+                        ❤️
+                    {% elif notification["type"] == "comment" %}
+                        💬
+                    {% else %}
+                        🔔
+                    {% endif %}
+
+                </div>
+
+                <div class="notification-content">
+
+                    <strong>
+                        {{ notification["sender"] }}
+                    </strong>
+
+                    <p>
+                        {{ notification["message"] }}
+                    </p>
+
+                    <small>
+                        {{ notification["created_at"] }}
+                    </small>
+
+                </div>
+
+            </div>
+
+        {% endfor %}
+
+    {% else %}
+
+        <div class="empty-notifications">
+
+            <div>🔔</div>
+
+            <h3>No notifications</h3>
+
+            <p>
+                You're all caught up.
+            </p>
+
+        </div>
+
+    {% endif %}
+
+</main>
+
+</body>
+</html>

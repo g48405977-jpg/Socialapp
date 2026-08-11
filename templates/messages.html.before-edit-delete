@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Chat - {{ username }}</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
+
+</head>
+
+<body class="chat-page">
+
+<header class="chat-header">
+
+    <a href="/inbox" class="back-link">
+        ←
+    </a>
+
+    <div class="chat-user">
+        {% if profile_image %}
+            <img
+                src="/static/uploads/{{ profile_image }}"
+                class="chat-avatar chat-avatar-image"
+                alt="Profile"
+            >
+        {% else %}
+            <div class="chat-avatar">
+                {{ username[0].upper() }}
+            </div>
+        {% endif %}
+
+        <div>
+            <strong>{{ username }}</strong>
+            <small id="online-status">
+    {% if is_online %}
+        🟢 Online
+    {% elif last_seen %}
+        ⚫ Last seen {{ last_seen }}
+    {% else %}
+        ⚫ Offline
+    {% endif %}
+</small>
+        </div>
+    </div>
+
+</header>
+
+
+<main class="chat-messages">
+
+    {% for message in messages %}
+
+        {% if message["sender"] == session["username"] %}
+
+            <div class="message-row sent" data-message-id="{{ message["id"] }}">
+
+                <div class="message-bubble">
+
+                    {% if message["reply_to"] %}
+                        {% for original in messages %}
+                            {% if original["id"] == message["reply_to"] %}
+                                <div class="reply-preview-message">
+                                    <strong>{{ original["sender"] }}</strong>
+                                    <div>
+                                        {{ original["content"] or "📎 Media message" }}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+
+
+                    {% if message["image"] %}
+                        <img
+                            src="/static/uploads/{{ message['image'] }}"
+                            class="chat-image"
+                            alt="Photo"
+                        >
+                    {% endif %}
+
+                    {% if message["content"] %}
+                        <div>{{ message["content"] }}</div>
+                    {% endif %}
+
+                    {% if message["voice"] %}
+                        <audio
+                            controls
+                            class="chat-voice"
+                            preload="metadata"
+                        >
+                            <source
+                                src="/static/uploads/{{ message['voice'] }}"
+                                type="audio/webm"
+                            >
+                            Your browser does not support audio.
+                        </audio>
+                    {% endif %}
+
+                    <div class="message-actions">
+
+    <form method="POST"
+          action="/messages/edit/{{ message['id'] }}"
+          style="display:inline;">
+        <input
+            type="text"
+            id="reply-to"
+        name="reply_to"
+        value=""
+        type="hidden"
+    >
+    <input
+        name="content"
+            value="{{ message['content'] }}"
+            placeholder="Edit message"
+            required
+        >
+        <button type="submit">✏️ Edit</button>
+    </form>
+
+    <form method="POST"
+          action="/messages/delete/{{ message['id'] }}"
+          style="display:inline;"
+          onsubmit="return confirm('Delete this message?');">
+        <button type="submit">🗑️ Delete</button>
+    </form>
+
+</div>
+
+                    <button
+    type="button"
+    class="reply-button"
+    onclick="startReply('{{ message['id'] }}', '{{ message['content']|e }}')"
+>↩️ Reply</button>
+
+                    <div class="message-reactions"
+     data-message-id="{{ message["id"] }}">
+
+    <form method="POST"
+          action="/messages/react/{{ message["id"] }}"
+          style="display:inline;">
+        <button type="submit" name="reaction" value="❤️">❤️</button>
+    </form>
+
+    <form method="POST"
+          action="/messages/react/{{ message["id"] }}"
+          style="display:inline;">
+        <button type="submit" name="reaction" value="👍">👍</button>
+    </form>
+
+    <form method="POST"
+          action="/messages/react/{{ message["id"] }}"
+          style="display:inline;">
+        <button type="submit" name="reaction" value="😂">😂</button>
+    </form>
+
+    <form method="POST"
+          action="/messages/react/{{ message["id"] }}"
+          style="display:inline;">
+        <button type="submit" name="reaction" value="😮">😮</button>
+    </form>
+
+    <form method="POST"
+          action="/messages/react/{{ message["id"] }}"
+          style="display:inline;">
+        <button type="submit" name="reaction" value="😢">😢</button>
+    </form>
+
+    <form method="POST"
+          action="/messages/react/{{ message["id"] }}"
+          style="display:inline;">
+        <button type="submit" name="reaction" value="😡">😡</button>
+    </form>
+
+    <div class="message-reaction"
+         data-reaction-message-id="{{ message['id'] }}">
+        {% set ns = namespace(counts={}) %}
+
+        {% for reaction in reactions %}
+            {% if reaction["message_id"] == message["id"] %}
+                {% set current = ns.counts.get(reaction["reaction"], 0) %}
+                {% set _ = ns.counts.update({
+                    reaction["reaction"]: current + 1
+                }) %}
+            {% endif %}
+        {% endfor %}
+
+        {% for emoji, count in ns.counts.items() %}
+            <span class="reaction-item">
+                {{ emoji }} {{ count }}
+            </span>
+        {% endfor %}
+    </div>
+
+</div>
+
+                    <div
+    class="message-reaction"
+    data-reaction-message-id="{{ message['id'] }}"
+>
+    {% set ns = namespace(counts={}) %}
+
+    {% for reaction in reactions %}
+        {% if reaction["message_id"] == message["id"] %}
+            {% set current = ns.counts.get(reaction["reaction"], 0) %}
+            {% set _ = ns.counts.update({
+                reaction["reaction"]: current + 1
+            }) %}
+        {% endif %}
+    {% endfor %}
+
+    {% for emoji, count in ns.counts.items() %}
+        <span class="reaction-item">
+            {{ emoji }} {{ count }}
+        </span>
+    {% endfor %}
+</div>
+
+
+
+                    <small class="message-time">
+                        {{ message["created_at"]|message_time }}
+                    </small>
+
+                    <span class="message-status">
+                        {% if message["read"] == 1 %}
+                            ✓✓
+                        {% else %}
+                            ✓
+                        {% endif %}
+                    </span>
+
+                </div>
+
+            </div>
+
+        {% else %}
+
+            <div class="message-row received" data-message-id="{{ message["id"] }}">
+
+                <div class="message-bubble">
+
+                    {% if message["image"] %}
+                        <img
+                            src="/static/uploads/{{ message['image'] }}"
+                            class="chat-image"
+                            alt="Photo"
+                        >
+                    {% endif %}
+
+                    {% if message["content"] %}
+                        <div>{{ message["content"] }}</div>
+                    {% endif %}
+
+                    <small class="message-time">
+                        {{ message["created_at"]|message_time }}
+                    </small>
+
+                </div>
+
+            </div>
+
+        {% endif %}
+
+    {% endfor %}
+
+</main>
+
+<div id="typing-status" class="typing-status"></div>
+0
+<form
+    method="POST"
+    enctype="multipart/form-data"
+    action="/messages/{{ username }}/send"
+    class="chat-input"
+>
+
+    <input
+        type="file"
+        name="image"
+        id="image-input"
+        accept="image/*"
+        hidden
+    >
+
+    <label for="image-input" class="photo-button">
+        📷
+    </label>
+
+    <button
+        type="button"
+        id="voice-button"
+        class="voice-button"
+    >
+        🎤
+    </button>
+
+    <input
+        type="text"
+        name="content"
+        id="message-input"
+        placeholder="Write a message..."
+        autocomplete="off"
+    >
+
+    <button type="submit">
+        ➤
+    </button>
+
+</form>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+<script>
+function formatLastSeen(value) {
+    if (!value) return "⚫ Offline";
+
+    const date = new Date(value.replace(" ", "T") + "Z");
+    const now = new Date();
+
+    const seconds = Math.floor((now - date) / 1000);
+
+    if (seconds < 60) {
+        return "⚫ Last seen just now";
+    }
+
+    const minutes = Math.floor(seconds / 60);
+
+    if (minutes < 60) {
+        return "⚫ Last seen " + minutes +
+               (minutes === 1 ? " minute ago" : " minutes ago");
+    }
+
+    const hours = Math.floor(minutes / 60);
+
+    if (hours < 24) {
+        return "⚫ Last seen " + hours +
+               (hours === 1 ? " hour ago" : " hours ago");
+    }
+
+    const days = Math.floor(hours / 24);
+
+    if (days === 1) {
+        return "⚫ Last seen yesterday";
+    }
+
+    return "⚫ Last seen " + days + " days ago";
+}
+
+const initialStatus =
+    document.getElementById("online-status");
+
+if (initialStatus &&
+    initialStatus.textContent.includes("Last seen")) {
+
+    initialStatus.textContent =
+        formatLastSeen("{{ last_seen or '' }}");
+}
+
+
+socket.on("user_status", function(data) {
+
+    if (data.username !== "{{ username }}") {
+        return;
+    }
+
+    const status =
+        document.getElementById("online-status");
+
+    if (!status) return;
+
+    if (data.is_online) {
+
+        status.textContent = "🟢 Online";
+
+    } else {
+
+        status.textContent =
+            formatLastSeen(data.last_seen);
+    }
+});
+</script>
+
+
+<script>
+function startReply(messageId, content) {
+    const input = document.getElementById("reply-to");
+    const preview = document.getElementById("reply-preview");
+    const text = document.getElementById("reply-text");
+
+    if (!input || !preview || !text) return;
+
+    input.value = messageId;
+    text.textContent = "Replying to: " + (content || "message");
+    preview.style.display = "flex";
+}
+
+function cancelReply() {
+    const input = document.getElementById("reply-to");
+    const preview = document.getElementById("reply-preview");
+
+    if (input) input.value = "";
+    if (preview) preview.style.display = "none";
+}
+</script>
+
+</body><script>
+const input = document.getElementById("message-input");
+const status = document.getElementById("typing-status");
+
+let timer;
+
+const socket = io();
+let timer;
+
+input.addEventListener("input", function () {
+
+    socket.emit("typing", {
+        username: "{{ session['username'] }}",
+        receiver: "{{ username }}"
+    });
+
+    if (input.value.trim() !== "") {
+        status.textContent = "Typing...";
+    } else {
+        status.textContent = "";
+    }
+
+    clearTimeout(timer);
+
+    timer = setTimeout(() => {
+        status.textContent = "";
+    }, 1200);
+});
+
+socket.emit("message_seen", {
+    sender: "{{ username }}",
+    receiver: "{{ session['username'] }}"
+});
+
+socket.on("messages_seen", function (data) {
+    if (data.sender === "{{ session['username'] }}" &&
+        data.receiver === "{{ username }}") {
+
+        document.querySelectorAll(".message-status").forEach(function(status) {
+            status.textContent = "✓✓";
+        });
+    }
+});
+
+socket.on("new_message", function (data) {
+
+    if (data.sender === "{{ username }}" &&
+        data.receiver === "{{ session['username'] }}") {
+
+        const row = document.createElement("div");
+        row.className = "message-row received";
+
+        const bubble = document.createElement("div");
+        bubble.className = "message-bubble";
+
+        if (data.image) {
+            const img = document.createElement("img");
+
+            img.src = "/static/uploads/" + data.image;
+            img.className = "chat-image";
+            img.alt = "Photo";
+
+            bubble.appendChild(img);
+        }
+
+        if (data.voice) {
+            const audio = document.createElement("audio");
+
+            audio.controls = true;
+            audio.preload = "metadata";
+            audio.className = "chat-voice";
+
+            const source = document.createElement("source");
+            source.src = "/static/uploads/" + data.voice;
+            source.type = "audio/webm";
+
+            audio.appendChild(source);
+            bubble.appendChild(audio);
+        }
+
+        if (data.content) {
+            const text = document.createElement("div");
+            text.textContent = data.content;
+            bubble.appendChild(text);
+        }
+
+        row.appendChild(bubble);
+
+        document.querySelector(".chat-messages").appendChild(row);
+
+        window.scrollTo({
+            top: document.body.scrollHeight,
+            behavior: "smooth"
+        });
+    }
+});
+
+
+socket.on("user_typing", function (data) {
+
+    if (data.username === "{{ username }}") {
+        status.textContent = "Typing...";
+
+        clearTimeout(timer);
+
+        timer = setTimeout(() => {
+            status.textContent = "";
+        }, 1200);
+    }
+});
+</script>
+
+
+
+
+<script>
+
+
+
+
+
+
+
+
+
+
+
+
+<script>
+document.addEventListener("click", async function(event) {
+
+    const button = event.target.closest(".reaction-button");
+
+    if (!button) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const messageId = button.dataset.messageId;
+    const reaction = button.dataset.reaction;
+
+    if (!messageId || !reaction) return;
+
+    console.log("REACTION CLICK:", messageId, reaction);
+
+    try {
+        const response = await fetch(
+            "/messages/react/" + messageId,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: "reaction=" + encodeURIComponent(reaction),
+                credentials: "same-origin"
+            }
+        );
+
+        console.log("REACTION RESPONSE:", response.status);
+
+        if (!response.ok) {
+            console.error("Reaction failed:", response.status);
+        }
+
+    } catch (error) {
+        console.error("Reaction error:", error);
+    }
+});
+</script>
+
+
+<script>
+socket.on("message_reaction", function(data) {
+
+    console.log("LIVE REACTION:", data);
+
+    const box = document.querySelector(
+        '[data-reaction-message-id="' + data.message_id + '"]'
+    );
+
+    if (!box) {
+        console.log("REACTION BOX NOT FOUND:", data.message_id);
+        return;
+    }
+
+    box.innerHTML = "";
+
+    if (data.counts) {
+        Object.entries(data.counts).forEach(function(entry) {
+
+            const span = document.createElement("span");
+
+            span.className = "reaction-item";
+            span.textContent = entry[0] + " " + entry[1];
+
+            box.appendChild(span);
+        });
+    }
+});
+</script>
+
+</html>
+
+

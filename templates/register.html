@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Register - SocialApp</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
+
+</head>
+
+<body class="auth-page">
+
+<div class="auth-card">
+
+    <div class="logo">
+        🚀
+    </div>
+
+    <h1>Join SocialApp</h1>
+
+    <p class="subtitle">
+        Create your account
+    </p>
+
+    <form
+        method="POST"
+        action="/register"
+    >
+
+        <input
+            type="text"
+            name="username"
+            placeholder="Choose username"
+            autocomplete="username"
+            required
+        >
+
+        <input
+            type="password"
+            name="password"
+            placeholder="Create password"
+            autocomplete="new-password"
+            required
+        >
+
+        <button
+            type="submit"
+            class="auth-button"
+        >
+            Create Account
+        </button>
+
+    </form>
+
+    <p class="auth-footer">
+        Already have an account?
+        <a href="/login">
+            Login
+        </a>
+    </p>
+
+</div>
+
+</body>
+</html>

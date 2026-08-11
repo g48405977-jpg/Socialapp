@@ -1,0 +1,1523 @@
+from flask import Flask, render_template, request, redirect, session
+from flask_socketio import SocketIO
+import sqlite3
+import os
+
+from werkzeug.security import (
+    generate_password_hash,
+    check_password_hash
+)
+
+from werkzeug.utils import secure_filename
+
+
+app = Flask(__name__)
+
+
+from datetime import datetime
+
+@app.template_filter("message_time")
+def message_time(value):
+    try:
+        return datetime.fromisoformat(
+            value.replace("Z", "")
+        ).strftime("%I:%M %p")
+    except Exception:
+        return value
+
+
+
+from datetime import datetime
+
+def format_message_time(value):
+    try:
+        return datetime.fromisoformat(
+            value.replace("Z", "")
+        ).strftime("%I:%M %p")
+    except Exception:
+        return value
+
+
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+app.secret_key = "socialapp-secret"
+
+UPLOAD_FOLDER = "static/uploads"
+
+ALLOWED_EXTENSIONS = {
+    "png",
+    "jpg",
+    "jpeg",
+    "gif"
+}
+
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+os.makedirs(
+    UPLOAD_FOLDER,
+    exist_ok=True
+)
+
+
+def db():
+
+    conn = sqlite3.connect(
+        "social.db"
+    )
+
+    conn.row_factory = sqlite3.Row
+
+    return conn
+
+
+def allowed_file(filename):
+
+    return (
+        "." in filename
+        and
+        filename.rsplit(
+            ".",
+            1
+        )[1].lower()
+        in ALLOWED_EXTENSIONS
+    )
+
+
+def init_db():
+
+    conn = db()
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            profile_image TEXT
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            content TEXT NOT NULL,
+            image TEXT,
+            likes INTEGER DEFAULT 0
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            content TEXT NOT NULL
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS follows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            follower TEXT NOT NULL,
+            following TEXT NOT NULL,
+            UNIQUE(follower, following)
+        )
+    """)
+
+    user_columns = [
+        row[1]
+        for row in conn.execute(
+            "PRAGMA table_info(users)"
+        ).fetchall()
+    ]
+
+    post_columns = [
+        row[1]
+        for row in conn.execute(
+            "PRAGMA table_info(posts)"
+        ).fetchall()
+    ]
+
+    if "profile_image" not in user_columns:
+
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN profile_image TEXT"
+        )
+
+    if "image" not in post_columns:
+
+        conn.execute(
+            "ALTER TABLE posts ADD COLUMN image TEXT"
+        )
+
+    conn.commit()
+
+    conn.close()
+
+
+@app.route("/")
+def home():
+
+    conn = db()
+
+    posts = conn.execute(
+        """
+        SELECT *
+        FROM posts
+        ORDER BY id DESC
+        """
+    ).fetchall()
+
+    comments = conn.execute(
+        """
+        SELECT *
+        FROM comments
+        ORDER BY id ASC
+        """
+    ).fetchall()
+
+    unread = 0
+
+    if "username" in session:
+        unread = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM notifications
+            WHERE username = ?
+            AND read = 0
+            """,
+            (session["username"],)
+        ).fetchone()[0]
+
+    conn.close()
+
+    return render_template(
+        "index.html",
+        posts=posts,
+        comments=comments,
+        username=session.get("username"),
+        unread=unread
+    )
+
+
+@app.route(
+    "/register",
+    methods=["GET", "POST"]
+)
+def register():
+
+    if request.method == "POST":
+
+        username = request.form[
+            "username"
+        ].strip()
+
+        password = request.form[
+            "password"
+        ]
+
+        if not username or not password:
+
+            return (
+                "Username and password are required."
+            )
+
+        try:
+
+            conn = db()
+
+            conn.execute(
+                """
+                INSERT INTO users
+                (username, password)
+                VALUES (?, ?)
+                """,
+                (
+                    username,
+                    generate_password_hash(
+                        password
+                    )
+                )
+            )
+
+            conn.commit()
+
+            conn.close()
+
+            return redirect(
+                "/login"
+            )
+
+        except sqlite3.IntegrityError:
+
+            return (
+                "Username already exists."
+            )
+
+    return render_template(
+        "register.html"
+    )
+
+
+@app.route(
+    "/login",
+    methods=["GET", "POST"]
+)
+def login():
+
+    if request.method == "POST":
+
+        username = request.form[
+            "username"
+        ].strip()
+
+        password = request.form[
+            "password"
+        ]
+
+        conn = db()
+
+        user = conn.execute(
+            """
+            SELECT *
+            FROM users
+            WHERE username = ?
+            """,
+            (username,)
+        ).fetchone()
+
+        conn.close()
+
+        if user and check_password_hash(
+            user["password"],
+            password
+        ):
+
+            session[
+                "username"
+            ] = username
+
+            conn = db()
+            conn.execute(
+                "UPDATE users SET is_online = 1 WHERE username = ?",
+                (username,)
+            )
+            conn.commit()
+            conn.close()
+
+            return redirect("/")
+
+        return (
+            "Wrong username or password."
+        )
+
+    return render_template(
+        "login.html"
+    )
+
+
+@app.route("/logout")
+def logout():
+    username = session.get("username")
+
+    if username:
+        conn = db()
+        conn.execute(
+            "UPDATE users SET is_online = 0 WHERE username = ?",
+            (username,)
+        )
+        conn.commit()
+        conn.close()
+
+    session.clear()
+    return redirect("/")
+
+
+@app.route(
+    "/post",
+    methods=["POST"]
+)
+def post():
+
+    if "username" not in session:
+
+        return redirect(
+            "/login"
+        )
+
+    content = request.form.get(
+        "content",
+        ""
+    ).strip()
+
+    file = request.files.get(
+        "photo"
+    )
+
+    image = None
+
+    if file and file.filename:
+
+        if allowed_file(
+            file.filename
+        ):
+
+            filename = secure_filename(
+                file.filename
+            )
+
+            filename = (
+                session["username"]
+                + "_"
+                + filename
+            )
+
+            file.save(
+                os.path.join(
+                    app.config[
+                        "UPLOAD_FOLDER"
+                    ],
+                    filename
+                )
+            )
+
+            image = filename
+
+    if content or image:
+
+        conn = db()
+
+        conn.execute(
+            """
+            INSERT INTO posts
+            (username, content, image)
+            VALUES (?, ?, ?)
+            """,
+            (
+                session["username"],
+                content,
+                image
+            )
+        )
+
+        conn.commit()
+
+        conn.close()
+
+    return redirect("/")
+
+
+@app.route(
+    "/like/<int:post_id>",
+    methods=["POST"]
+)
+def like(post_id):
+
+    if "username" not in session:
+
+        return redirect(
+            "/login"
+        )
+
+    conn = db()
+
+    conn.execute(
+        """
+        UPDATE posts
+        SET likes = likes + 1
+        WHERE id = ?
+        """,
+        (post_id,)
+    )
+
+    conn.commit()
+
+    conn.close()
+
+    return redirect("/")
+
+
+@app.route(
+    "/comment/<int:post_id>",
+    methods=["POST"]
+)
+def comment(post_id):
+
+    if "username" not in session:
+
+        return redirect(
+            "/login"
+        )
+
+    content = request.form.get(
+        "content",
+        ""
+    ).strip()
+
+    image = request.files.get("image")
+    image_path = None
+
+    if image and image.filename:
+        import os
+        from werkzeug.utils import secure_filename
+
+        upload_dir = os.path.join(
+            app.root_path,
+            "static",
+            "uploads",
+            "chat"
+        )
+
+        os.makedirs(upload_dir, exist_ok=True)
+
+        filename = secure_filename(image.filename)
+
+        import time
+        filename = (
+            str(int(time.time())) + "_" + filename
+        )
+
+        image.save(
+            os.path.join(upload_dir, filename)
+        )
+
+        image_path = "chat/" + filename
+
+    if content or image_path:
+
+        conn = db()
+
+        conn.execute(
+            """
+            INSERT INTO comments
+            (post_id, username, content)
+            VALUES (?, ?, ?)
+            """,
+            (
+                post_id,
+                session["username"],
+                content
+            )
+        )
+
+        conn.commit()
+
+        conn.close()
+
+    return redirect("/")
+
+
+@app.route("/profile")
+def profile():
+
+    if "username" not in session:
+
+        return redirect(
+            "/login"
+        )
+
+    conn = db()
+
+    user = conn.execute(
+        """
+        SELECT *
+        FROM users
+        WHERE username = ?
+        """,
+        (session["username"],)
+    ).fetchone()
+
+    posts = conn.execute(
+        """
+        SELECT *
+        FROM posts
+        WHERE username = ?
+        ORDER BY id DESC
+        """,
+        (session["username"],)
+    ).fetchall()
+
+    followers = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM follows
+        WHERE following = ?
+        """,
+        (session["username"],)
+    ).fetchone()[0]
+
+    following = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM follows
+        WHERE follower = ?
+        """,
+        (session["username"],)
+    ).fetchone()[0]
+
+    conn.close()
+
+    profile_image = None
+
+    if user:
+
+        profile_image = user[
+            "profile_image"
+        ]
+
+    return render_template(
+        "profile.html",
+        username=session[
+            "username"
+        ],
+        profile_image=profile_image,
+        posts=posts,
+        followers=followers,
+        following=following
+    )
+
+
+@app.route(
+    "/follow/<username>",
+    methods=["POST"]
+)
+def follow(username):
+
+    if "username" not in session:
+
+        return redirect(
+            "/login"
+        )
+
+    me = session["username"]
+
+    if me == username:
+
+        return redirect(
+            "/profile"
+        )
+
+    conn = db()
+
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO follows
+        (follower, following)
+        VALUES (?, ?)
+        """,
+        (
+            me,
+            username
+        )
+    )
+
+    conn.execute(
+        """
+        INSERT INTO notifications
+        (username, sender, type, message)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            username,
+            me,
+            "follow",
+            me + " started following you"
+        )
+    )
+
+    conn.commit()
+
+    conn.close()
+
+    return redirect(
+        "/"
+    )
+
+
+@app.route(
+    "/unfollow/<username>",
+    methods=["POST"]
+)
+def unfollow(username):
+
+    if "username" not in session:
+
+        return redirect(
+            "/login"
+        )
+
+    conn = db()
+
+    conn.execute(
+        """
+        DELETE FROM follows
+        WHERE follower = ?
+        AND following = ?
+        """,
+        (
+            session["username"],
+            username
+        )
+    )
+
+    conn.commit()
+
+    conn.close()
+
+    return redirect(
+        "/"
+    )
+
+
+@app.route(
+    "/profile/upload",
+    methods=["POST"]
+)
+def profile_upload():
+
+    if "username" not in session:
+
+        return redirect(
+            "/login"
+        )
+
+    file = request.files.get(
+        "profile_image"
+    )
+
+    if file and file.filename:
+
+        if allowed_file(
+            file.filename
+        ):
+
+            filename = secure_filename(
+                file.filename
+            )
+
+            filename = (
+                "profile_"
+                + session["username"]
+                + "_"
+                + filename
+            )
+
+            file.save(
+                os.path.join(
+                    app.config[
+                        "UPLOAD_FOLDER"
+                    ],
+                    filename
+                )
+            )
+
+            conn = db()
+
+            conn.execute(
+                """
+                UPDATE users
+                SET profile_image = ?
+                WHERE username = ?
+                """,
+                (
+                    filename,
+                    session["username"]
+                )
+            )
+
+            conn.commit()
+
+            conn.close()
+
+    return redirect(
+        "/profile"
+    )
+
+
+@app.route("/search")
+def search():
+
+    if "username" not in session:
+        return redirect("/login")
+
+    q = request.args.get("q", "").strip()
+
+    conn = db()
+
+    if q:
+        users = conn.execute(
+            """
+            SELECT username, profile_image
+            FROM users
+            WHERE username LIKE ?
+            AND username != ?
+            ORDER BY username
+            """,
+            ("%" + q + "%", session["username"])
+        ).fetchall()
+    else:
+        users = []
+
+    following = conn.execute(
+        """
+        SELECT following
+        FROM follows
+        WHERE follower = ?
+        """,
+        (session["username"],)
+    ).fetchall()
+
+    conn.close()
+
+    following_names = {
+        row["following"] for row in following
+    }
+
+    return render_template(
+        "search.html",
+        users=users,
+        query=q,
+        following_names=following_names
+    )
+
+
+@app.route("/notifications")
+def notifications():
+
+    if "username" not in session:
+        return redirect("/login")
+
+    conn = db()
+
+    items = conn.execute(
+        """
+        SELECT *
+        FROM notifications
+        WHERE username = ?
+        ORDER BY id DESC
+        """,
+        (session["username"],)
+    ).fetchall()
+
+    conn.execute(
+        """
+        UPDATE notifications
+        SET read = 1
+        WHERE username = ?
+        """,
+        (session["username"],)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return render_template(
+        "notifications.html",
+        notifications=items
+    )
+
+
+@app.route("/messages/<username>")
+def messages(username):
+
+    if "username" not in session:
+        return redirect("/login")
+
+    me = session["username"]
+
+    conn = db()
+
+    other = conn.execute(
+        "SELECT username, profile_image, is_online, last_seen FROM users WHERE username = ?",
+        (username,)
+    ).fetchone()
+
+    if not other:
+        conn.close()
+        return "User not found."
+
+    conn.execute(
+        """
+        UPDATE messages
+        SET read = 1
+        WHERE sender = ?
+        AND receiver = ?
+        AND read = 0
+        """,
+        (username, me)
+    )
+
+    conn.commit()
+
+    messages = conn.execute(
+        """
+        SELECT *
+        FROM messages
+        WHERE
+        (sender = ? AND receiver = ?)
+        OR
+        (sender = ? AND receiver = ?)
+        ORDER BY id ASC
+        """,
+        (me, username, username, me)
+    ).fetchall()
+
+    reactions = conn.execute("""
+        SELECT message_id, username, reaction
+        FROM message_reactions
+        WHERE message_id IN (
+            SELECT id
+            FROM messages
+            WHERE
+                (sender = ? AND receiver = ?)
+                OR
+                (sender = ? AND receiver = ?)
+        )
+        ORDER BY id ASC
+    """, (me, username, username, me)).fetchall()
+
+    conn.close()
+
+    return render_template(
+        "messages.html",
+        username=username,
+        profile_image=other["profile_image"],
+        is_online=other["is_online"],
+        last_seen=other["last_seen"],
+        messages=messages,
+        reactions=reactions
+    )
+
+
+@app.route("/messages/<username>/send", methods=["POST"])
+def send_message(username):
+
+    if "username" not in session:
+        return redirect("/login")
+
+    import os
+    import time
+    from werkzeug.utils import secure_filename
+
+    content = request.form.get("content", "").strip()
+
+    image = request.files.get("image")
+    voice = request.files.get("voice")
+
+    image_path = None
+    voice_path = None
+
+    upload_dir = os.path.join(
+        app.root_path,
+        "static",
+        "uploads",
+        "chat"
+    )
+
+    os.makedirs(upload_dir, exist_ok=True)
+
+    if image and image.filename:
+        filename = secure_filename(image.filename)
+        filename = str(int(time.time() * 1000)) + "_" + filename
+
+        image.save(
+            os.path.join(upload_dir, filename)
+        )
+
+        image_path = "chat/" + filename
+
+    if voice and voice.filename:
+        filename = secure_filename(voice.filename)
+
+        if not filename:
+            filename = "voice.webm"
+
+        filename = str(int(time.time() * 1000)) + "_" + filename
+
+        voice.save(
+            os.path.join(upload_dir, filename)
+        )
+
+        voice_path = "chat/" + filename
+
+    if content or image_path or voice_path:
+
+        conn = db()
+
+        cursor = conn.execute(
+            """
+            INSERT INTO messages
+            (sender, receiver, content, image, voice)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                session["username"],
+                username,
+                content,
+                image_path,
+                voice_path
+            )
+        )
+
+        message_id = cursor.lastrowid
+
+        socketio.emit(
+            "new_message",
+            {
+                "id": message_id,
+                "sender": session["username"],
+                "receiver": username,
+                "content": content,
+                "image": image_path,
+                "voice": voice_path
+            },
+            to=connected_users.get(username)
+        )
+
+        conn.execute(
+            """
+            INSERT INTO notifications
+            (username, sender, type, message)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                username,
+                session["username"],
+                "message",
+                session["username"] + " sent you a message"
+            )
+        )
+
+        conn.commit()
+        conn.close()
+
+    return redirect("/messages/" + username)
+
+
+@app.route("/messages/delete/<int:message_id>", methods=["POST"])
+def delete_message(message_id):
+
+    if "username" not in session:
+        return redirect("/login")
+
+    me = session["username"]
+
+    conn = db()
+
+    message = conn.execute(
+        """
+        SELECT sender, receiver
+        FROM messages
+        WHERE id = ?
+        """,
+        (message_id,)
+    ).fetchone()
+
+    if not message:
+        conn.close()
+        return redirect("/")
+
+    if message["sender"] != me:
+        conn.close()
+        return redirect("/messages/" + message["receiver"])
+
+    receiver = message["receiver"]
+
+    conn.execute(
+        "DELETE FROM messages WHERE id = ?",
+        (message_id,)
+    )
+
+    conn.commit()
+    conn.close()
+
+    socketio.emit(
+        "message_deleted",
+        {
+            "message_id": message_id
+        },
+        to=connected_users.get(receiver)
+    )
+
+    return redirect("/messages/" + receiver)
+
+
+@app.route("/messages/edit/<int:message_id>", methods=["POST"])
+def edit_message(message_id):
+
+    if "username" not in session:
+        return redirect("/login")
+
+    me = session["username"]
+    new_content = request.form.get("content", "").strip()
+
+    if not new_content:
+        return redirect("/")
+
+    conn = db()
+
+    message = conn.execute(
+        """
+        SELECT sender, receiver
+        FROM messages
+        WHERE id = ?
+        """,
+        (message_id,)
+    ).fetchone()
+
+    if not message:
+        conn.close()
+        return redirect("/")
+
+    if message["sender"] != me:
+        receiver = message["receiver"]
+        conn.close()
+        return redirect("/messages/" + receiver)
+
+    receiver = message["receiver"]
+
+    conn.execute(
+        """
+        UPDATE messages
+        SET content = ?
+        WHERE id = ?
+        """,
+        (new_content, message_id)
+    )
+
+    conn.commit()
+    conn.close()
+
+    socketio.emit(
+        "message_edited",
+        {
+            "message_id": message_id,
+            "content": new_content
+        },
+        to=connected_users.get(receiver)
+    )
+
+    return redirect("/messages/" + receiver)
+
+
+@app.route("/inbox")
+def inbox():
+
+    if "username" not in session:
+        return redirect("/login")
+
+    me = session["username"]
+
+    conn = db()
+
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM messages
+        WHERE sender = ? OR receiver = ?
+        ORDER BY id DESC
+        """,
+        (me, me)
+    ).fetchall()
+
+    conversations = []
+    seen = set()
+
+    for row in rows:
+
+        if row["sender"] == me:
+            person = row["receiver"]
+        else:
+            person = row["sender"]
+
+        if person in seen:
+            continue
+
+        seen.add(person)
+
+        user = conn.execute(
+            """
+            SELECT username, profile_image
+            FROM users
+            WHERE username = ?
+            """,
+            (person,)
+        ).fetchone()
+
+        unread = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM messages
+            WHERE sender = ?
+            AND receiver = ?
+            AND read = 0
+            """,
+            (person, me)
+        ).fetchone()[0]
+
+        conversations.append({
+            "username": person,
+            "last_message": row["content"],
+            "created_at": row["created_at"],
+            "profile_image": user["profile_image"] if user else None,
+            "unread": unread
+        })
+
+    conn.close()
+
+    return render_template(
+        "inbox.html",
+        conversations=conversations
+    )
+
+
+@app.route("/user/<username>")
+def public_profile(username):
+
+    if "username" not in session:
+        return redirect("/login")
+
+    me = session["username"]
+
+    conn = db()
+
+    user = conn.execute(
+        """
+        SELECT *
+        FROM users
+        WHERE username = ?
+        """,
+        (username,)
+    ).fetchone()
+
+    if not user:
+        conn.close()
+        return "User not found."
+
+    posts = conn.execute(
+        """
+        SELECT *
+        FROM posts
+        WHERE username = ?
+        ORDER BY id DESC
+        """,
+        (username,)
+    ).fetchall()
+
+    followers = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM follows
+        WHERE following = ?
+        """,
+        (username,)
+    ).fetchone()[0]
+
+    following = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM follows
+        WHERE follower = ?
+        """,
+        (username,)
+    ).fetchone()[0]
+
+    is_following = conn.execute(
+        """
+        SELECT 1
+        FROM follows
+        WHERE follower = ?
+        AND following = ?
+        """,
+        (me, username)
+    ).fetchone()
+
+    conn.close()
+
+    return render_template(
+        "public_profile.html",
+        user=user,
+        posts=posts,
+        followers=followers,
+        following=following,
+        is_following=is_following
+    )
+
+
+@app.route("/profile/upload", methods=["POST"])
+def upload_profile():
+
+    if "username" not in session:
+        return redirect("/login")
+
+    file = request.files.get("photo")
+
+    if not file or not file.filename:
+        return redirect("/profile")
+
+    allowed = {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp"
+    }
+
+    ext = Path(file.filename).suffix.lower()
+
+    if ext not in allowed:
+        return "Only JPG, JPEG, PNG and WEBP images are allowed."
+
+    filename = session["username"] + ext
+
+    upload_dir = Path(app.root_path) / "static" / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    file.save(upload_dir / filename)
+
+    conn = db()
+
+    conn.execute(
+        """
+        UPDATE users
+        SET profile_image = ?
+        WHERE username = ?
+        """,
+        (filename, session["username"])
+    )
+
+    conn.commit()
+    conn.close()
+
+    return redirect("/profile")
+
+
+
+connected_users = {}
+
+@socketio.on("connect")
+def handle_connect():
+    username = session.get("username")
+
+    if username:
+        connected_users[username] = request.sid
+
+        conn = db()
+        conn.execute(
+            """
+            UPDATE users
+            SET is_online = 1
+            WHERE username = ?
+            """,
+            (username,)
+        )
+        conn.commit()
+        conn.close()
+
+        socketio.emit(
+            "user_status",
+            {
+                "username": username,
+                "is_online": True,
+                "last_seen": None
+            }
+        )
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    username = session.get("username")
+
+    if username and connected_users.get(username) == request.sid:
+
+        connected_users.pop(username, None)
+
+        conn = db()
+        conn.execute(
+            """
+            UPDATE users
+            SET is_online = 0,
+                last_seen = CURRENT_TIMESTAMP
+            WHERE username = ?
+            """,
+            (username,)
+        )
+        conn.commit()
+
+        last_seen = conn.execute(
+            """
+            SELECT last_seen
+            FROM users
+            WHERE username = ?
+            """,
+            (username,)
+        ).fetchone()["last_seen"]
+
+        conn.close()
+
+        socketio.emit(
+            "user_status",
+            {
+                "username": username,
+                "is_online": False,
+                "last_seen": last_seen
+            }
+        )
+
+
+@socketio.on("typing")
+def handle_typing(data):
+    sender = data.get("username")
+    receiver = data.get("receiver")
+
+    if not sender or not receiver:
+        return
+
+    receiver_sid = connected_users.get(receiver)
+
+    if receiver_sid:
+        socketio.emit(
+            "user_typing",
+            data,
+            to=receiver_sid
+        )
+
+
+@socketio.on("message_seen")
+def handle_message_seen(data):
+    sender = data.get("sender")
+    receiver = data.get("receiver")
+
+    if not sender or not receiver:
+        return
+
+    conn = db()
+    conn.execute(
+        """
+        UPDATE messages
+        SET read = 1
+        WHERE sender = ?
+        AND receiver = ?
+        AND read = 0
+        """,
+        (sender, receiver)
+    )
+    conn.commit()
+    conn.close()
+
+    sender_sid = connected_users.get(sender)
+
+    if sender_sid:
+        socketio.emit(
+            "messages_seen",
+            {
+                "sender": sender,
+                "receiver": receiver
+            },
+            to=sender_sid
+        )
+
+
+@app.route("/messages/react/<int:message_id>", methods=["POST"])
+def react_message(message_id):
+
+    if "username" not in session:
+        return redirect("/login")
+
+    me = session["username"]
+    reaction = request.form.get("reaction", "").strip()
+
+    allowed = ["❤️", "😂", "👍", "😢", "😡"]
+
+    if reaction not in allowed:
+        return redirect("/")
+
+    conn = db()
+
+    message = conn.execute("""
+        SELECT id, sender, receiver
+        FROM messages
+        WHERE id = ?
+    """, (message_id,)).fetchone()
+
+    if not message:
+        conn.close()
+        return redirect("/")
+
+    if me not in (message["sender"], message["receiver"]):
+        conn.close()
+        return redirect("/")
+
+    conn.execute("""
+        INSERT INTO message_reactions
+        (message_id, username, reaction)
+        VALUES (?, ?, ?)
+        ON CONFLICT(message_id, username)
+        DO UPDATE SET reaction = excluded.reaction
+    """, (message_id, me, reaction))
+
+    conn.commit()
+
+    reactions = conn.execute("""
+        SELECT username, reaction
+        FROM message_reactions
+        WHERE message_id = ?
+    """, (message_id,)).fetchall()
+
+    reaction_counts = {}
+
+    for row in reactions:
+        reaction_counts[row["reaction"]] = (
+            reaction_counts.get(row["reaction"], 0) + 1
+        )
+
+    conn.close()
+
+    receiver = (
+        message["receiver"]
+        if me == message["sender"]
+        else message["sender"]
+    )
+
+    reaction_data = {
+        "message_id": message_id,
+        "username": me,
+        "reaction": reaction,
+        "counts": reaction_counts
+    }
+
+    # Send reaction update to the other user
+    other_sid = connected_users.get(receiver)
+
+    if other_sid:
+        socketio.emit(
+            "message_reaction",
+            reaction_data,
+            to=other_sid
+        )
+
+    # Also send it back to the current user
+    my_sid = connected_users.get(me)
+
+    if my_sid:
+        socketio.emit(
+            "message_reaction",
+            reaction_data,
+            to=my_sid
+        )
+
+    return {
+        "success": True,
+        "message_id": message_id,
+        "reaction": reaction,
+        "counts": reaction_counts
+    }
+
+if __name__ == "__main__":
+    init_db()
+    print("SocialApp database ready")
+
+    socketio.run(
+        app,
+        host="0.0.0.0",
+        port=5000
+    )

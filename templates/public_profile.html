@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>{{ user["username"] }} - SocialApp</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
+
+</head>
+
+<body>
+
+<header>
+
+    <h2>SocialApp 🚀</h2>
+
+    <a href="/">🏠 Home</a>
+
+</header>
+
+<main>
+
+<section class="profile">
+
+    {% if user["profile_image"] %}
+
+        <img
+            src="/static/uploads/{{ user['profile_image'] }}"
+            class="profile-image"
+        >
+
+    {% else %}
+
+        <div class="avatar big">
+            {{ user["username"][0].upper() }}
+        </div>
+
+    {% endif %}
+
+    <h1>{{ user["username"] }}</h1>
+
+    <p>@{{ user["username"] }}</p>
+
+
+    <div class="stats">
+
+        <div>
+            <strong>{{ posts|length }}</strong>
+            <span>Posts</span>
+        </div>
+
+        <div>
+            <strong>{{ followers }}</strong>
+            <span>Followers</span>
+        </div>
+
+        <div>
+            <strong>{{ following }}</strong>
+            <span>Following</span>
+        </div>
+
+    </div>
+
+
+    {% if is_following %}
+
+        <form
+            method="POST"
+            action="/unfollow/{{ user['username'] }}"
+        >
+
+            <button type="submit">
+                Following ✓
+            </button>
+
+        </form>
+
+    {% else %}
+
+        <form
+            method="POST"
+            action="/follow/{{ user['username'] }}"
+        >
+
+            <button type="submit">
+                Follow +
+            </button>
+
+        </form>
+
+    {% endif %}
+
+
+    <br>
+
+
+    <a
+        href="/messages/{{ user['username'] }}"
+        class="message-button"
+    >
+        💬 Message
+    </a>
+
+</section>
+
+
+<h2>📝 Posts</h2>
+
+
+{% for post in posts %}
+
+<article class="post">
+
+    <strong>
+        {{ post["username"] }}
+    </strong>
+
+    {% if post["content"] %}
+
+        <p class="content">
+            {{ post["content"] }}
+        </p>
+
+    {% endif %}
+
+
+    {% if post["image"] %}
+
+        <img
+            src="/static/uploads/{{ post['image'] }}"
+            class="post-image"
+        >
+
+    {% endif %}
+
+
+    <div class="actions">
+
+        ❤️ {{ post["likes"] }}
+
+    </div>
+
+</article>
+
+{% else %}
+
+<p>
+    No posts yet.
+</p>
+
+{% endfor %}
+
+</main>
+
+</body>
+
+</html>
